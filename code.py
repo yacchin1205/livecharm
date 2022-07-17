@@ -14,7 +14,6 @@ import errno
 
 DEFAULT_LIGHT_WAKEUP_SEC = 30
 DEFAULT_DEEP_WAKEUP_SEC = 5
-#LONG_DEEP_WAKEUP_SEC = 60 * 60
 MAX_SLEEP_COUNT = 20
 AUDIO_DIR = './audio'
 
@@ -22,10 +21,6 @@ AUDIO_DIR = './audio'
 WAKE_PIN = board.D13
 
 def open_dac():
-    # for Tiny 2040 (prototype)
-    #return audiobusio.I2SOut(board.D11, board.D12, board.D10) as dac:
-    # for Tiny 2040 PWM
-    #return audiopwmio.PWMAudioOut(board.GP0)
     # Feather RP2040
     return audiobusio.I2SOut(board.A1, board.A2, board.A0)
 
@@ -33,17 +28,12 @@ def open_dac():
 def get_pin_alarm():
     return alarm.pin.PinAlarm(pin=WAKE_PIN, value=True, pull=True)
 
-#def enter_deep_sleep(sec):
 def enter_deep_sleep():
-    #alarm.sleep_memory[0] = 0
     pin_alarm = get_pin_alarm()
-    #time_alarm = alarm.time.TimeAlarm(monotonic_time=time.monotonic() + sec)
-    # Exit the program, and then deep sleep until the alarm wakes us.
-    #alarm.exit_and_deep_sleep_until_alarms(pin_alarm, time_alarm)
-    # for Bug https://github.com/adafruit/circuitpython/issues/5794
     alarm.exit_and_deep_sleep_until_alarms(pin_alarm)
-    # Does not return, so we never get here.
+    # Deep Sleep後は続行されない
 
+# ---- Light Sleep関係の処理
 def enter_light_sleep():
     pin_alarm = get_pin_alarm()
     time_alarm = alarm.time.TimeAlarm(monotonic_time=time.monotonic() + DEFAULT_LIGHT_WAKEUP_SEC)
@@ -136,6 +126,7 @@ class AudioFiles:
             return (index, index)
         return None
 
+# Audioの再生完了待ち
 def wait_audio(dac, button):
     time.sleep(0.5)
     if not dac.playing:
@@ -147,6 +138,7 @@ def wait_audio(dac, button):
             v = True
     return v
 
+# Audioのタッチ操作受付処理
 def loop_waves(audio_files):
     with digitalio.DigitalInOut(WAKE_PIN) as button:
         button.switch_to_input(pull=digitalio.Pull.DOWN)
@@ -159,6 +151,8 @@ def loop_waves(audio_files):
         if not audio_files.has(index):
             index = 0
 
+        # ボタンが押されるまで待つ ... 一定時間に押されなければ
+        # この処理は抜ける
         while sleep_count > 0:
             if next_play or button.value:
                 print('Pressed')
@@ -175,7 +169,6 @@ def loop_waves(audio_files):
 print('WakeAlarm', alarm.wake_alarm)
 if is_time_alarm(alarm.wake_alarm):
     # WakeUp by TimeAlarm
-    #enter_deep_sleep(LONG_DEEP_WAKEUP_SEC)
     enter_deep_sleep()
 
 audio_files = AudioFiles(AUDIO_DIR)
@@ -183,16 +176,13 @@ if len(audio_files.files) == 0:
     print('No audio files')
 
 else:
-    #with digitalio.DigitalInOut(board.LED_R) as led_r, digitalio.DigitalInOut(board.LED_B) as led_b:
-    #    led_r.direction = digitalio.Direction.OUTPUT
-    #    led_b.direction = digitalio.Direction.OUTPUT
-    #    led_r.value = False
-    #    led_b.value = False
     with open_dac() as dac:
         loop_waves(audio_files)
-    #    led_r.value = True
+
+        # タッチ操作でLight Sleepが解除された場合は
+        # 繰り返し待つ
         while enter_light_sleep():
             loop_waves(audio_files)
 
-#enter_deep_sleep(DEFAULT_DEEP_WAKEUP_SEC)
+# しばらく操作がなかったのでDeep Sleep
 enter_deep_sleep()
