@@ -14,7 +14,7 @@ import errno
 
 DEFAULT_LIGHT_WAKEUP_SEC = 30
 DEFAULT_DEEP_WAKEUP_SEC = 5
-LONG_DEEP_WAKEUP_SEC = 60 * 60
+#LONG_DEEP_WAKEUP_SEC = 60 * 60
 MAX_SLEEP_COUNT = 20
 AUDIO_DIR = './audio'
 
@@ -33,10 +33,11 @@ def open_dac():
 def get_pin_alarm():
     return alarm.pin.PinAlarm(pin=WAKE_PIN, value=True, pull=True)
 
-def enter_deep_sleep(sec):
+#def enter_deep_sleep(sec):
+def enter_deep_sleep():
     #alarm.sleep_memory[0] = 0
     pin_alarm = get_pin_alarm()
-    time_alarm = alarm.time.TimeAlarm(monotonic_time=time.monotonic() + sec)
+    #time_alarm = alarm.time.TimeAlarm(monotonic_time=time.monotonic() + sec)
     # Exit the program, and then deep sleep until the alarm wakes us.
     #alarm.exit_and_deep_sleep_until_alarms(pin_alarm, time_alarm)
     # for Bug https://github.com/adafruit/circuitpython/issues/5794
@@ -58,10 +59,10 @@ class AudioFiles:
         self.waves = {}
         self.files = self.load_files(audio_dir)
         self.max_index = max([max([max(r[0], r[1]) for r in rset]) if rset is not None and len(rset) > 0 else 0 for rset, _ in self.files])
-        
+
     def load_files(self, audio_dir):
         if not audio_dir.endswith('/'):
-           audio_dir += '/' 
+           audio_dir += '/'
         try:
             files = []
             for file in os.listdir(audio_dir):
@@ -80,13 +81,13 @@ class AudioFiles:
                 print('Directory not exists:', audio_dir)
                 return []
             raise e
-    
+
     def file_entry(self, audio_dir, file):
         prefix = re.match(r'([0-9\-_]+)[\-_].+', file)
         if prefix is None:
             return None
         return [self._parse_range(elem) for elem in prefix.group(1).split('_')]
-    
+
     def get_wave(self, index):
         path = self._resolve_wave(index)
         if path is None:
@@ -98,10 +99,10 @@ class AudioFiles:
         wave = audiocore.WaveFile(data)
         self.waves[path] = wave
         return wave
-    
+
     def has(self, index):
         return index <= self.max_index
-    
+
     def _resolve_wave(self, index):
         if index == 0 and all([r is None for r, _ in self.files]):
             print('Randomize waves...')
@@ -115,7 +116,7 @@ class AudioFiles:
             return None
         _, path = random.choice(cands)
         return path
-    
+
     def _is_match(self, rset, index):
         if rset is None:
             return False
@@ -124,7 +125,7 @@ class AudioFiles:
             if (rmin <= index) and (index <= rmax):
                 return True
         return False
-    
+
     def _parse_range(self, elem):
         m = re.match(r'([0-9]+)\-([0-9]+)', elem)
         if m is not None:
@@ -134,7 +135,7 @@ class AudioFiles:
             index = int(elem)
             return (index, index)
         return None
-        
+
 def wait_audio(dac, button):
     time.sleep(0.5)
     if not dac.playing:
@@ -148,7 +149,7 @@ def wait_audio(dac, button):
 
 def loop_waves(audio_files):
     with digitalio.DigitalInOut(WAKE_PIN) as button:
-        button.switch_to_input(pull=digitalio.Pull.UP)
+        button.switch_to_input(pull=digitalio.Pull.DOWN)
 
         sleep_count = MAX_SLEEP_COUNT
         index = 0
@@ -174,12 +175,13 @@ def loop_waves(audio_files):
 print('WakeAlarm', alarm.wake_alarm)
 if is_time_alarm(alarm.wake_alarm):
     # WakeUp by TimeAlarm
-    enter_deep_sleep(LONG_DEEP_WAKEUP_SEC)
+    #enter_deep_sleep(LONG_DEEP_WAKEUP_SEC)
+    enter_deep_sleep()
 
 audio_files = AudioFiles(AUDIO_DIR)
 if len(audio_files.files) == 0:
     print('No audio files')
-    
+
 else:
     #with digitalio.DigitalInOut(board.LED_R) as led_r, digitalio.DigitalInOut(board.LED_B) as led_b:
     #    led_r.direction = digitalio.Direction.OUTPUT
@@ -192,4 +194,5 @@ else:
         while enter_light_sleep():
             loop_waves(audio_files)
 
-enter_deep_sleep(DEFAULT_DEEP_WAKEUP_SEC)
+#enter_deep_sleep(DEFAULT_DEEP_WAKEUP_SEC)
+enter_deep_sleep()
