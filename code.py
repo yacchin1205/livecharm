@@ -13,12 +13,12 @@ import re
 import errno
 
 DEFAULT_LIGHT_WAKEUP_SEC = 30
-DEFAULT_DEEP_WAKEUP_SEC = 5
 MAX_SLEEP_COUNT = 20
 AUDIO_DIR = './audio'
 
 # ---- Interface関係の定義
-WAKE_PIN = board.D13
+WAKE_PIN = board.D12
+SHUTDOWN_PIN = board.D11
 
 def open_dac():
     # Feather RP2040
@@ -139,14 +139,16 @@ def wait_audio(dac, button):
     return v
 
 # Audioのタッチ操作受付処理
-def loop_waves(audio_files):
+def loop_waves(dac, audio_files, sd_mode):
     with digitalio.DigitalInOut(WAKE_PIN) as button:
         button.switch_to_input(pull=digitalio.Pull.DOWN)
 
         sleep_count = MAX_SLEEP_COUNT
         index = 0
+        sd_mode.value = True
         dac.play(audio_files.get_wave(index))
         next_play = wait_audio(dac, button)
+        sd_mode.value = False
         index += 1
         if not audio_files.has(index):
             index = 0
@@ -156,8 +158,10 @@ def loop_waves(audio_files):
         while sleep_count > 0:
             if next_play or button.value:
                 print('Pressed')
+                sd_mode.value = True
                 dac.play(audio_files.get_wave(index))
                 next_play = wait_audio(dac, button)
+                sd_mode.value = False
                 index += 1
                 if not audio_files.has(index):
                     index = 0
@@ -166,23 +170,20 @@ def loop_waves(audio_files):
             time.sleep(0.1)
 
 # ---- Main
-print('WakeAlarm', alarm.wake_alarm)
-if is_time_alarm(alarm.wake_alarm):
-    # WakeUp by TimeAlarm
-    enter_deep_sleep()
-
 audio_files = AudioFiles(AUDIO_DIR)
 if len(audio_files.files) == 0:
     print('No audio files')
 
 else:
-    with open_dac() as dac:
-        loop_waves(audio_files)
+    with digitalio.DigitalInOut(SHUTDOWN_PIN) as sd_mode:
+        sd_mode.switch_to_output(value=False)
+        with open_dac() as dac:
+            loop_waves(dac, audio_files, sd_mode)
 
-        # タッチ操作でLight Sleepが解除された場合は
-        # 繰り返し待つ
-        while enter_light_sleep():
-            loop_waves(audio_files)
+            # タッチ操作でLight Sleepが解除された場合は
+            # 繰り返し待つ
+            while enter_light_sleep():
+                loop_waves(dac, audio_files, sd_mode)
 
 # しばらく操作がなかったのでDeep Sleep
 enter_deep_sleep()
